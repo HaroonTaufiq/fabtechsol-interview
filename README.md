@@ -23,7 +23,7 @@ A comprehensive FastAPI-based REST API for managing users and employees with ful
 ## 📋 Requirements
 
 - **Python**: 3.8+ (Recommended: 3.11+)
-- **Database**: SQLite (default) or PostgreSQL
+- **Database**: Neon PSTGRES
 - **Dependencies**: Listed in \`requirements.txt\`
 
 ## 🛠️ Installation & Setup
@@ -86,12 +86,6 @@ The project includes Docker support for easy deployment and development:
 \`\`\`bash
 # Development
 docker-compose up --build
-
-# Production
-docker-compose -f docker-compose.prod.yml up --build
-
-# Run in background
-docker-compose up -d
 
 # View logs
 docker-compose logs -f
@@ -238,7 +232,6 @@ employee-management-api/
 ├── run.py                 # Development server runner
 ├── Dockerfile             # Docker image configuration
 ├── docker-compose.yml     # Development Docker setup
-├── docker-compose.prod.yml # Production Docker setup
 └── README.md              # This file
 \`\`\`
 
@@ -252,18 +245,6 @@ employee-management-api/
 | \`HOST\` | Server host | \`0.0.0.0\` |
 | \`PORT\` | Server port | \`8000\` |
 
-### Database Configuration
-
-**SQLite (Default)**
-\`\`\`bash
-DATABASE_URL=sqlite+aiosqlite:///./employee_management.db
-\`\`\`
-
-**PostgreSQL**
-\`\`\`bash
-DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/dbname
-\`\`\`
-
 ## 🧪 Testing
 
 ### Manual Testing with Swagger UI
@@ -273,46 +254,6 @@ DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/dbname
 
 ### API Testing with curl
 See the example API usage section above for curl commands.
-
-## 🚀 Deployment
-
-### Production Deployment with Docker
-
-1. **Use the production Docker Compose**
-   \`\`\`bash
-   docker-compose -f docker-compose.prod.yml up --build -d
-   \`\`\`
-
-2. **Environment Variables for Production**
-   Create a \`.env\` file:
-   \`\`\`bash
-   DATABASE_URL=postgresql+asyncpg://user:password@db:5432/employee_management
-   POSTGRES_USER=your_user
-   POSTGRES_PASSWORD=your_password
-   POSTGRES_DB=employee_management
-   \`\`\`
-
-### Cloud Deployment
-
-The application can be deployed to various cloud platforms:
-- **Heroku**: Use the included \`Dockerfile\`
-- **AWS ECS/Fargate**: Use the production Docker setup
-- **Google Cloud Run**: Deploy the Docker container
-- **DigitalOcean App Platform**: Use the Dockerfile
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (\`git checkout -b feature/amazing-feature\`)
-3. Commit your changes (\`git commit -m 'Add amazing feature'\`)
-4. Push to the branch (\`git push origin feature/amazing-feature\`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🆘 Support
 
 For support and questions:
 - Create an issue in the repository
@@ -328,47 +269,6 @@ For support and questions:
 - Docker support
 - Comprehensive API documentation
 \`\`\`
-
-```dockerfile file="Dockerfile"
-# Use Python 3.11 slim image as base
-FROM python:3.11-slim as base
-
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
-
-# Set work directory
-WORKDIR /app
-
-# Install system dependencies
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        build-essential \
-        curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements first for better caching
-COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
-COPY . .
-
-# Create non-root user
-RUN adduser --disabled-password --gecos '' --shell /bin/bash appuser \
-    && chown -R appuser:appuser /app
-USER appuser
-
-# Expose port
-EXPOSE 8000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
 
 # Run the application
 CMD ["python", "run.py"]
