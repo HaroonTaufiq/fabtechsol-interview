@@ -71,7 +71,9 @@ class PaginationParams(BaseModel):
     size: int = Field(10, ge=1, le=100, description="Items per page")
 
 class PaginatedResponse(BaseModel):
-    items: List[dict]
+    model_config = ConfigDict(from_attributes=True)
+    
+    items: List[UserResponse | EmployeeResponse]  # Allow both types
     total: int
     page: int
     size: int
