@@ -5,7 +5,7 @@ from typing import List, Optional
 import math
 
 from database import get_db
-from models import User
+from models import User, Employee
 from schemas import (
     UserCreate, UserUpdate, UserResponse, 
     PaginatedResponse, UserFilters
@@ -51,57 +51,66 @@ async def get_users(
     db: AsyncSession = Depends(get_db)
 ):
     """Get paginated list of users with filtering, searching, and ordering"""
-    
-    # Build base query
-    query = select(User)
-    
-    # Apply filters
-    if role:
-        query = query.where(User.role == role)
-    if is_active is not None:
-        query = query.where(User.is_active == is_active)
-    
-    # Apply search
-    if search:
-        search_filter = or_(
-            User.username.ilike(f"%{search}%"),
-            User.email.ilike(f"%{search}%"),
-            User.first_name.ilike(f"%{search}%"),
-            User.last_name.ilike(f"%{search}%")
-        )
-        query = query.where(search_filter)
-    
-    # Get total count
-    count_query = select(func.count()).select_from(query.subquery())
-    total_result = await db.execute(count_query)
-    total = total_result.scalar()
-    
-    # Apply ordering
-    if hasattr(User, order_by):
-        order_column = getattr(User, order_by)
-        if order_desc:
-            query = query.order_by(desc(order_column))
+    try:
+        # Build base query
+        query = select(User)
+        
+        # Apply filters
+        if role:
+            query = query.where(User.role == role)
+        if is_active is not None:
+            query = query.where(User.is_active == is_active)
+        
+        # Apply search
+        if search:
+            search_filter = or_(
+                User.username.ilike(f"%{search}%"),
+                User.email.ilike(f"%{search}%"),
+                User.first_name.ilike(f"%{search}%"),
+                User.last_name.ilike(f"%{search}%")
+            )
+            query = query.where(search_filter)
+        
+        # Get total count
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await db.execute(count_query)
+        total = total_result.scalar()
+        
+        # Apply ordering
+        if hasattr(User, order_by):
+            order_column = getattr(User, order_by)
+            if order_desc:
+                query = query.order_by(desc(order_column))
+            else:
+                query = query.order_by(asc(order_column))
         else:
-            query = query.order_by(asc(order_column))
-    
-    # Apply pagination
-    offset = (page - 1) * size
-    query = query.offset(offset).limit(size)
-    
-    # Execute query
-    result = await db.execute(query)
-    users = result.scalars().all()
-    
-    # Calculate pagination info
-    pages = math.ceil(total / size)
-    
-    return PaginatedResponse(
-        items=[UserResponse.model_validate(user) for user in users],
-        total=total,
-        page=page,
-        size=size,
-        pages=pages
-    )
+            # Default ordering if specified column doesn't exist
+            query = query.order_by(desc(User.created_at))
+        
+        # Apply pagination
+        offset = (page - 1) * size
+        query = query.offset(offset).limit(size)
+        
+        # Execute query
+        result = await db.execute(query)
+        users = result.scalars().all()
+        
+        # Calculate pagination info
+        pages = math.ceil(total / size) if total > 0 else 0
+        
+        return PaginatedResponse(
+            items=[UserResponse.model_validate(user) for user in users],
+            total=total,
+            page=page,
+            size=size,
+            pages=pages
+        )
+    except Exception as e:
+        print(f"Error in get_users: {str(e)}")  # This will show in server logs
+        raise HTTPException(
+            status_code=500,
+            detail=f"An error occurred while fetching users: {str(e)}"
+        )
 
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
@@ -163,12 +172,20 @@ async def delete_user(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a specific user"""
+    # First check if user exists
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # Delete associated employee record if it exists
+    employee_result = await db.execute(select(Employee).where(Employee.user_id == user_id))
+    employee = employee_result.scalar_one_or_none()
+    if employee:
+        await db.delete(employee)
+    
+    # Delete the user
     await db.delete(user)
     await db.commit()
     

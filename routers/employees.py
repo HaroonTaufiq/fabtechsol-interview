@@ -74,60 +74,69 @@ async def get_employees(
     db: AsyncSession = Depends(get_db)
 ):
     """Get paginated list of employees with filtering, searching, and ordering"""
-    
-    # Build base query with user relationship
-    query = select(Employee).options(selectinload(Employee.user))
-    
-    # Apply filters
-    if department:
-        query = query.where(Employee.department.ilike(f"%{department}%"))
-    if position:
-        query = query.where(Employee.position.ilike(f"%{position}%"))
-    if status:
-        query = query.where(Employee.status == status)
-    if manager_id is not None:
-        query = query.where(Employee.manager_id == manager_id)
-    
-    # Apply search
-    if search:
-        search_filter = or_(
-            Employee.employee_id.ilike(f"%{search}%"),
-            Employee.department.ilike(f"%{search}%"),
-            Employee.position.ilike(f"%{search}%")
-        )
-        query = query.where(search_filter)
-    
-    # Get total count
-    count_query = select(func.count()).select_from(query.subquery())
-    total_result = await db.execute(count_query)
-    total = total_result.scalar()
-    
-    # Apply ordering
-    if hasattr(Employee, order_by):
-        order_column = getattr(Employee, order_by)
-        if order_desc:
-            query = query.order_by(desc(order_column))
+    try:
+        # Build base query with user relationship
+        query = select(Employee).options(selectinload(Employee.user))
+        
+        # Apply filters
+        if department:
+            query = query.where(Employee.department.ilike(f"%{department}%"))
+        if position:
+            query = query.where(Employee.position.ilike(f"%{position}%"))
+        if status:
+            query = query.where(Employee.status == status)
+        if manager_id is not None:
+            query = query.where(Employee.manager_id == manager_id)
+        
+        # Apply search
+        if search:
+            search_filter = or_(
+                Employee.employee_id.ilike(f"%{search}%"),
+                Employee.department.ilike(f"%{search}%"),
+                Employee.position.ilike(f"%{search}%")
+            )
+            query = query.where(search_filter)
+        
+        # Get total count
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await db.execute(count_query)
+        total = total_result.scalar()
+        
+        # Apply ordering
+        if hasattr(Employee, order_by):
+            order_column = getattr(Employee, order_by)
+            if order_desc:
+                query = query.order_by(desc(order_column))
+            else:
+                query = query.order_by(asc(order_column))
         else:
-            query = query.order_by(asc(order_column))
-    
-    # Apply pagination
-    offset = (page - 1) * size
-    query = query.offset(offset).limit(size)
-    
-    # Execute query
-    result = await db.execute(query)
-    employees = result.scalars().all()
-    
-    # Calculate pagination info
-    pages = math.ceil(total / size)
-    
-    return PaginatedResponse(
-        items=[EmployeeResponse.model_validate(employee) for employee in employees],
-        total=total,
-        page=page,
-        size=size,
-        pages=pages
-    )
+            # Default ordering if specified column doesn't exist
+            query = query.order_by(desc(Employee.created_at))
+        
+        # Apply pagination
+        offset = (page - 1) * size
+        query = query.offset(offset).limit(size)
+        
+        # Execute query
+        result = await db.execute(query)
+        employees = result.scalars().all()
+        
+        # Calculate pagination info
+        pages = math.ceil(total / size) if total > 0 else 0
+        
+        return PaginatedResponse(
+            items=[EmployeeResponse.model_validate(employee) for employee in employees],
+            total=total,
+            page=page,
+            size=size,
+            pages=pages
+        )
+    except Exception as e:
+        print(f"Error in get_employees: {str(e)}")  # This will show in server logs
+        raise HTTPException(
+            status_code=500,
+            detail=f"An error occurred while fetching employees: {str(e)}"
+        )
 
 @router.get("/{employee_id}", response_model=EmployeeResponse)
 async def get_employee(
